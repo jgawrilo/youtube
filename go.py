@@ -9,6 +9,7 @@ import codecs
 from bs4 import BeautifulSoup
 import argparse
 import requests
+import sys
 
 '''
 
@@ -30,7 +31,7 @@ def do_video_comments(pid,vid,comments,output):
         authorChannel = top.get("authorChannelId",{"value":""})["value"]
         dt = top["publishedAt"]
         name = top["authorDisplayName"]
-        text = BeautifulSoup(top["textDisplay"]).getText().replace("\t"," ").replace("\n"," ").replace("\r"," ").replace("\r\n"," ")
+        text = BeautifulSoup(top["textDisplay"],"lxml").getText().replace("\t"," ").replace("\n"," ").replace("\r"," ").replace("\r\n"," ")
         output.write("\t".join((ctype,pid,authorChannel,cid,vid,dt,text,name)) + "\n")
 
 
@@ -87,7 +88,7 @@ def get_commentsThreads_for_video(vid, youtube):
         data.append(response)
 
         while "nextPageToken" in response:
-            print "Pulling more comments..."
+            print len(data)
             response = youtube.commentThreads().list(
             part="id,snippet,replies",
             videoId=vid,
@@ -113,7 +114,7 @@ def get_comment(cid, youtube):
     data.append(response)
 
     while "nextPageToken" in response:
-        print "Pulling more comments..."
+        print len(data)
         response = youtube.comments().list(
         part="id,snippet",
         parentId=cid,
@@ -143,7 +144,7 @@ def get_activities_for_channel(cid, youtube):
     data.append(response)
 
     while "nextPageToken" in response:
-        print "Pulling more activities..."
+        print len(data)
         response = youtube.activities().list(
         part="id,snippet,contentDetails",
         channelId=cid,
@@ -178,17 +179,30 @@ def get_playlist_info(pid, youtube):
     ).execute()
     return response
 
+def get_video_suggestions(youtube):
+    search_response = youtube.search().list(
+    type="video",
+    part="id",
+    relatedToVideoId="xXgeoFlUY8Y",
+    maxResults=20
+    ).execute()
+    print json.dumps(search_response,indent=2)
+
 
 # MAIN
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Pull some youtube.')
 
-    parser.add_argument("--key", help="https://cloud.google.com/console")
+    parser.add_argument("--key", help="https://cloud.google.com/console", required=True)
 
-    parser.add_argument("--playlistfile", help="file with playlists id's per line")
+    parser.add_argument("--playlistfile", help="file with playlists id's per line", required=True)
+
+    parser.add_argument("--name", help="name of pull", required=True)
 
     args = parser.parse_args()
+
+    DATA_DIR = "./data/" + args.name + "/"
 
     # Set DEVELOPER_KEY to the API key value from the APIs & auth > Registered apps
     # tab of
@@ -203,35 +217,41 @@ if __name__ == "__main__":
     youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
         developerKey=DEVELOPER_KEY)
 
-    playlist_info_dir = "./playlist_info/"
+    #get_video_suggestions(youtube)
+    #sys.exit()
 
-    playlist_dir = "./playlists/"
+    playlist_info_dir = DATA_DIR + "playlist_info/"
 
-    video_dir = "./videos/"
+    playlist_dir = DATA_DIR + "playlists/"
 
-    comments_dir = "./comments/"
+    video_dir = DATA_DIR + "videos/"
 
-    comment_ids_dir = "./comment_ids/"
+    comments_dir = DATA_DIR + "comments/"
 
-    channels_dir = "./channels/"
+    comment_ids_dir = DATA_DIR + "comment_ids/"
 
-    for d in [playlist_info_dir, playlist_dir, video_dir, comments_dir, comment_ids_dir, channels_dir]:
+    channels_dir = DATA_DIR + "channels/"
+
+    for d in [DATA_DIR, playlist_info_dir, playlist_dir, video_dir, comments_dir, comment_ids_dir, channels_dir]:
         if not os.path.exists(d):
             os.makedirs(d)
 
-
-    comment_output = codecs.open("all_video_comments.txt", 'w', 'utf-8')
+    comment_output = codecs.open(DATA_DIR + "all_video_comments.txt", 'w', 'utf-8')
     comment_output.write("\t".join(("type","playlist_id","author","comment_id","video_id","datetime","text","name")) + "\n")
     
     playListIDs = open(args.playlistfile).readlines()
 
     # for all playlists
     playlist_count = 0
-    video_count = 0
-    channel_count = 0
-    comment_count = 0
 
-    for pid in playListIDs:
+    pids = []
+
+    for line in playListIDs:
+        # print line
+        playlist_count += 1
+        pid,start,end = line.split()
+        end = end.strip()
+        pids.append(pid)
         print "Playlist:", pid
         if not os.path.isfile(playlist_info_dir + pid):
             print "Pulling Playlist data..."
@@ -239,25 +259,32 @@ if __name__ == "__main__":
                 pinfo_data = get_playlist_info(pid, youtube)
                 output.write(json.dumps(pinfo_data,ensure_ascii=False, encoding='utf8',indent=2))
         else:
+            print "Already pulled playlist data..."
             with codecs.open(playlist_info_dir + pid, 'r', 'utf-8') as pinput:
                 pinfo_data = json.loads(" ".join(pinput.readlines()))
 
-    for pid in playListIDs:
-        print "Playlist:", pid
-        playlist_count += 1
+    print playlist_count, "total playlists."
+    
+    for pid in pids:
+        print "On Playlist:", pid
+        
         if not os.path.isfile(playlist_dir + pid):
-            print "Pulling Playlist data..."
+            print "Pulling Videos for playlist:" + pid
             with codecs.open(playlist_dir + pid, 'w', 'utf-8') as output:
                 p_data = get_videos_from_playlist(pid, youtube)
                 output.write(json.dumps(p_data,ensure_ascii=False, encoding='utf8',indent=2))
         else:
+            print "Already pulled videos for playlist..."
             with codecs.open(playlist_dir + pid, 'r', 'utf-8') as pinput:
                 p_data = json.loads(" ".join(pinput.readlines()))
 
         # for all videos in playlist
+        print len(p_data.get("items",[])), "total videos."
         for video in p_data.get("items",[]):
+            channel_set = set()
+            comment_set = set()
+            num_activities = 0
             vid = video["contentDetails"]["videoId"]
-            video_count += 1
             print "On video:", vid
             if not os.path.isfile(video_dir + vid):
                 print "Pulling Video data..."
@@ -265,6 +292,7 @@ if __name__ == "__main__":
                     v_data = get_video_info(vid, youtube)
                     output.write(json.dumps(v_data,ensure_ascii=False, encoding='utf8',indent=2))
             else:
+                print "Already pulled data for video..."
                 with codecs.open(video_dir + vid, 'r', 'utf-8') as vinput:
                     v_data = json.loads(" ".join(vinput.readlines()))
 
@@ -274,8 +302,9 @@ if __name__ == "__main__":
             if v_data.get("items"):
                 num_comments = v_data.get("items",[{"statistics":{}}])[0]["statistics"].get("commentCount",0)
 
+            print "Pulling Comment Threads data..."
+
             if not os.path.isfile(comments_dir + vid):
-                print "Pulling Comment data..."
                 with codecs.open(comments_dir + vid, 'w', 'utf-8') as output:
                     c_data = get_commentsThreads_for_video(vid, youtube)
                     output.write(json.dumps(c_data,ensure_ascii=False, encoding='utf8',indent=2))
@@ -287,9 +316,9 @@ if __name__ == "__main__":
 
             channels = get_channels_from_comments(c_data)
 
+            print "Pulling Comment data..."
             for comment in comments:
                 if not os.path.isfile(comment_ids_dir + comment):
-                    print "Pulling Comment data..."
                     with codecs.open(comment_ids_dir + comment, 'w', 'utf-8') as output:
                         cid_data = get_comment(comment, youtube)
                         output.write(json.dumps(cid_data,ensure_ascii=False, encoding='utf8',indent=2))
@@ -303,24 +332,26 @@ if __name__ == "__main__":
                         if "authorChannelId" in comment_item["snippet"]:
                             channels.add(comment_item["snippet"]["authorChannelId"]["value"])
 
-            channel_count += len(channels)
+            channel_set.update(channels)
 
+            print "Pulling Channel data..."
             for channel in channels:
                 if not os.path.isfile(channels_dir + channel):
-                    print "Pulling Channel data..."
                     with codecs.open(channels_dir + channel, 'w', 'utf-8') as output:
                         channel_data = get_activities_for_channel(channel, youtube)
                         output.write(json.dumps(channel_data,ensure_ascii=False, encoding='utf8',indent=2))
                 else:
                     with codecs.open(channels_dir + channel, 'r', 'utf-8') as cinput:
                         channel_data = json.loads(" ".join(cinput.readlines()))
+                        num_activities = len(channel_data)
 
-            comment_count += len(all_comment_ids.keys())
-
-            print comment_count, "total comments."
-
-            if int(num_comments) != len(all_comment_ids.keys()):
-                print "** Comment mismatch **", num_comments, len(all_comment_ids.keys()), " - no big deal though"
+            comment_set.update(all_comment_ids.keys())
 
             
+            print len(channel_set), "total channels."
+            print len(comment_set), "total comments."
+            print num_activities, "total activities."
+
+            print num_comments, "comments in stats."
+
             do_video_comments(pid,vid,all_comment_ids,comment_output)
