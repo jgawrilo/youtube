@@ -253,11 +253,9 @@ if __name__ == "__main__":
 
     pids = []
 
-    for line in playListIDs:
-        # print line
+    for pid in playListIDs:
+        pid = pid.strip()
         playlist_count += 1
-        pid,start,end = line.split()
-        end = end.strip()
         pids.append(pid)
         print "Playlist:", pid
         if not os.path.isfile(playlist_info_dir + pid):

@@ -4,9 +4,12 @@ pulling data via youtube api
 Script to pull youtube.
 More info here: https://developers.google.com/youtube/v3/docs/
 
-Call with ./go.py --key <google_key> --playlistfile <path_to_playlist_file>
+Call with...
 
-playlist file should look like (one id per line)
+python go.py --key AIzaSy3jlkj4lkj23klBtONTIb1WeD-DyWp1_A --playlistfile ./test_playlists.txt --name test
 
-PLA292168BA44CB134
+playlist file should look like (one id per line)...
+
+PLA292168BA44CB134lllkajsdflkjaljl
 PLS3UB7jaIERzUiBvpSOHtHc_dzhV067jC
+...
