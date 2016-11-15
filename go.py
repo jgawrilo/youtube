@@ -86,6 +86,7 @@ def get_channel_for_id(xid, youtube):
 def get_commentsThreads_for_video(vid, youtube):
     try:
         data = []
+        length = 0
         response = youtube.commentThreads().list(
         part="id,snippet,replies",
         videoId=vid,
@@ -93,9 +94,11 @@ def get_commentsThreads_for_video(vid, youtube):
         ).execute()
 
         data.append(response)
+        length += len(response.get("items",[]))
+        print length
 
-        while "nextPageToken" in response:
-            print len(data)
+
+        while "nextPageToken" in response:   
             response = youtube.commentThreads().list(
             part="id,snippet,replies",
             videoId=vid,
@@ -103,6 +106,8 @@ def get_commentsThreads_for_video(vid, youtube):
             maxResults=20
             ).execute()
             data.append(response)
+            length += len(response.get("items",[]))
+            print length
 
         return data
 
@@ -112,6 +117,7 @@ def get_commentsThreads_for_video(vid, youtube):
 
 def get_comment(cid, youtube):
     data = []
+    length = 0
     response = youtube.comments().list(
     part="id,snippet",
     parentId=cid,
@@ -119,9 +125,10 @@ def get_comment(cid, youtube):
     ).execute()
 
     data.append(response)
+    length += len(response.get("items",[]))
+    print length
 
     while "nextPageToken" in response:
-        print len(data)
         response = youtube.comments().list(
         part="id,snippet",
         parentId=cid,
@@ -129,6 +136,8 @@ def get_comment(cid, youtube):
         maxResults=20
         ).execute()
         data.append(response)
+        length += len(response.get("items",[]))
+        print length
 
     return data
 
@@ -142,6 +151,7 @@ def get_subscriptions_for_channel(cid, youtube):
 
 def get_activities_for_channel(cid, youtube):
     data = []
+    length = 0
     response = youtube.activities().list(
     part="id,snippet,contentDetails",
     channelId=cid,
@@ -149,9 +159,10 @@ def get_activities_for_channel(cid, youtube):
     ).execute()
 
     data.append(response)
+    length += len(response.get("items",[]))
+    print length
 
     while "nextPageToken" in response:
-        print len(data)
         response = youtube.activities().list(
         part="id,snippet,contentDetails",
         channelId=cid,
@@ -159,6 +170,8 @@ def get_activities_for_channel(cid, youtube):
         maxResults=20
         ).execute()
         data.append(response)
+        length += len(response.get("items",[]))
+        print length
 
     return data
 
@@ -341,6 +354,7 @@ if __name__ == "__main__":
 
             print "Pulling Channel data..."
             for channel in channels:
+                print "Channel: ", channel
                 if not os.path.isfile(channels_dir + channel):
                     with codecs.open(channels_dir + channel, 'w', 'utf-8') as output:
                         channel_data = get_activities_for_channel(channel, youtube)
